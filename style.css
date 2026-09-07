@@ -1,0 +1,304 @@
+/* ============================================================
+   TOKENS
+   Concept: revision materials — paper, ink, highlighter pens.
+   Subject colours are functional (coded per subject), not decorative.
+============================================================ */
+:root{
+  --paper: #F5F6F1;
+  --paper-raised: #FFFFFF;
+  --ink: #1B1D2A;
+  --ink-soft: #565A72;
+  --ink-faint: #9295AC;
+  --line: #E3E4DC;
+
+  --amber: #F0A93C;      /* streaks, primary highlight */
+  --amber-soft: #FCEACB;
+  --mint: #2FBF88;       /* correct, mastered */
+  --mint-soft: #D6F3E6;
+  --coral: #EF6F6F;      /* needs revision, weak */
+  --coral-soft: #FBDEDE;
+  --indigo: #4C5FD5;     /* links, secondary actions */
+  --indigo-soft: #E2E5FB;
+
+  --radius-s: 10px;
+  --radius-m: 16px;
+  --radius-l: 22px;
+
+  --shadow: 0 1px 0 rgba(27,29,42,0.04);
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-num: "SF Mono", ui-monospace, "Courier New", monospace;
+}
+
+[data-theme="dark"]{
+  --paper: #14162B;
+  --paper-raised: #1E2140;
+  --ink: #F1F0F7;
+  --ink-soft: #ABAFD4;
+  --ink-faint: #6E7296;
+  --line: #2B2E52;
+
+  --amber-soft: #3A2E17;
+  --mint-soft: #123227;
+  --coral-soft: #3A1F22;
+  --indigo-soft: #23285C;
+  --shadow: 0 1px 0 rgba(0,0,0,0.2);
+}
+
+/* subject colour set, applied via data-subject-color="0".."7" */
+.sc-0{ --sub: #4C5FD5; } /* indigo   */
+.sc-1{ --sub: #2FBF88; } /* mint     */
+.sc-2{ --sub: #F0A93C; } /* amber    */
+.sc-3{ --sub: #EF6F6F; } /* coral    */
+.sc-4{ --sub: #B266E0; } /* violet   */
+.sc-5{ --sub: #2FA9BF; } /* teal     */
+.sc-6{ --sub: #D5804C; } /* clay     */
+.sc-7{ --sub: #6E9E3B; } /* moss     */
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y: none;
+}
+button{ font-family:inherit; }
+.hidden{ display:none !important; }
+input{ font-family:inherit; }
+
+/* ============================================================
+   LAYOUT SHELL
+============================================================ */
+#app{ max-width:520px; margin:0 auto; min-height:100vh; position:relative; }
+
+.topbar{
+  display:flex; align-items:flex-start; justify-content:space-between;
+  padding: calc(env(safe-area-inset-top) + 18px) 20px 8px;
+}
+.greeting{ margin:0; font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+.date-line{ margin:2px 0 0; font-size:13px; color:var(--ink-soft); }
+.icon-btn{
+  border:none; background:var(--paper-raised); color:var(--ink-soft);
+  width:38px; height:38px; border-radius:999px;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:var(--shadow);
+}
+
+#views{ padding: 4px 20px 100px; }
+
+.tabbar{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:0; width:100%; max-width:520px;
+  display:flex; justify-content:space-around;
+  background:var(--paper-raised);
+  border-top:1px solid var(--line);
+  padding: 8px 4px calc(env(safe-area-inset-bottom) + 8px);
+}
+.tab-btn{
+  border:none; background:none; color:var(--ink-faint);
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  font-size:11px; padding:4px 10px; border-radius:12px;
+}
+.tab-btn.active{ color:var(--ink); }
+.tab-btn.active svg{ color:var(--amber); }
+
+/* ============================================================
+   CARDS & PRIMITIVES
+============================================================ */
+.card{
+  background:var(--paper-raised);
+  border-radius:var(--radius-m);
+  padding:18px;
+  box-shadow:var(--shadow);
+  border:1px solid var(--line);
+}
+.section-title{
+  font-size:15px; font-weight:700; margin:22px 2px 10px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.section-title a{ font-size:13px; font-weight:600; color:var(--indigo); text-decoration:none; }
+
+.btn-primary{
+  width:100%; border:none; background:var(--ink); color:var(--paper);
+  padding:15px; border-radius:var(--radius-s); font-size:15px; font-weight:700;
+  margin-top:14px;
+}
+.btn-primary:active{ opacity:0.85; }
+.btn-secondary{
+  width:100%; border:1px solid var(--line); background:var(--paper-raised); color:var(--ink);
+  padding:14px; border-radius:var(--radius-s); font-size:15px; font-weight:600;
+  margin-top:10px;
+}
+.btn-ghost{
+  border:none; background:none; color:var(--indigo); font-weight:600; font-size:14px; padding:8px 0;
+}
+.btn-danger{ color:var(--coral); }
+
+.input-lg, select.input-lg{
+  width:100%; padding:14px; border-radius:var(--radius-s);
+  border:1px solid var(--line); background:var(--paper);
+  color:var(--ink); font-size:16px; margin-top:8px;
+}
+.field-label{ display:block; font-size:13px; color:var(--ink-soft); margin-top:16px; font-weight:600; }
+
+.chip-grid{ display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+.chip{
+  padding:9px 14px; border-radius:999px; border:1px solid var(--line);
+  background:var(--paper-raised); color:var(--ink); font-size:14px; font-weight:600;
+}
+.chip.selected{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+
+/* ============================================================
+   DASHBOARD
+============================================================ */
+.streak-card{
+  background: linear-gradient(135deg, var(--amber-soft), var(--paper-raised) 70%);
+  border-radius:var(--radius-l);
+  padding:20px;
+  display:flex; align-items:center; gap:16px;
+  border:1px solid var(--line);
+}
+.streak-ring{
+  width:64px; height:64px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--paper-raised); box-shadow: inset 0 0 0 5px var(--amber);
+  font-family:var(--font-num); font-weight:700; font-size:20px;
+  flex-shrink:0;
+}
+.streak-text b{ display:block; font-size:16px; }
+.streak-text span{ font-size:13px; color:var(--ink-soft); }
+
+.stat-row{ display:flex; gap:12px; margin-top:14px; }
+.stat-box{ flex:1; background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius-m); padding:14px; }
+.stat-box .num{ font-family:var(--font-num); font-size:22px; font-weight:700; }
+.stat-box .lbl{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+.quick-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+.quick-btn{
+  border:1px solid var(--line); background:var(--paper-raised); border-radius:var(--radius-m);
+  padding:16px 12px; text-align:left; font-weight:700; font-size:14px; color:var(--ink);
+}
+.quick-btn .qi{ display:block; margin-bottom:8px; color:var(--sub, var(--amber)); }
+
+.topic-row{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:13px 0; border-bottom:1px solid var(--line);
+}
+.topic-row:last-child{ border-bottom:none; }
+.topic-name{ font-weight:600; font-size:14px; }
+.topic-sub{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
+.pill{ font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; }
+.pill.weak{ background:var(--coral-soft); color:var(--coral); }
+.pill.due{ background:var(--amber-soft); color:#9A6C1B; }
+.pill.mastered{ background:var(--mint-soft); color:var(--mint); }
+
+.session-row{ display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); }
+.session-row:last-child{ border-bottom:none; }
+.session-dot{ width:10px; height:10px; border-radius:50%; background:var(--sub); flex-shrink:0; }
+.session-time{ margin-left:auto; font-family:var(--font-num); font-size:13px; color:var(--ink-soft); }
+
+.empty-state{ text-align:center; padding:30px 10px; color:var(--ink-soft); font-size:14px; }
+
+/* ============================================================
+   SUBJECTS
+============================================================ */
+.subject-card{
+  border-radius:var(--radius-m); padding:16px; margin-bottom:10px;
+  background:var(--paper-raised); border:1px solid var(--line);
+  border-left:5px solid var(--sub);
+}
+.subject-card-top{ display:flex; align-items:center; justify-content:space-between; }
+.subject-card-top h3{ margin:0; font-size:16px; }
+.subject-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.topic-list{ margin-top:10px; }
+.topic-chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.topic-chip{
+  font-size:12.5px; padding:6px 10px; border-radius:8px; background:var(--paper);
+  border:1px solid var(--line); font-weight:600;
+}
+.topic-chip.weak{ border-color:var(--coral); color:var(--coral); }
+
+/* ============================================================
+   REVISE / TIMER
+============================================================ */
+.timer-display{
+  text-align:center; padding:40px 0 20px;
+}
+.timer-display .t{
+  font-family:var(--font-num); font-size:56px; font-weight:700; letter-spacing:-1px;
+}
+.timer-display .ctx{ margin-top:6px; color:var(--ink-soft); font-size:14px; }
+.timer-controls{ display:flex; gap:10px; margin-top:20px; }
+.timer-controls button{ flex:1; }
+
+.confidence-row{ display:flex; gap:8px; margin:14px 0; }
+.conf-btn{
+  flex:1; padding:14px 0; border-radius:var(--radius-s); border:1px solid var(--line);
+  background:var(--paper-raised); font-weight:700; font-size:16px;
+}
+.conf-btn.selected{ background:var(--amber); border-color:var(--amber); color:#3A2A08; }
+
+/* ============================================================
+   QUIZZES
+============================================================ */
+.quiz-option{
+  display:block; width:100%; text-align:left; padding:14px; margin-top:10px;
+  border-radius:var(--radius-s); border:1px solid var(--line); background:var(--paper-raised);
+  font-size:15px; font-weight:600; color:var(--ink);
+}
+.quiz-option.correct{ border-color:var(--mint); background:var(--mint-soft); }
+.quiz-option.incorrect{ border-color:var(--coral); background:var(--coral-soft); }
+.quiz-option[disabled]{ opacity:1; }
+
+.progress-bar-track{ height:6px; border-radius:99px; background:var(--line); overflow:hidden; margin-bottom:16px; }
+.progress-bar-fill{ height:100%; background:var(--amber); border-radius:99px; }
+
+.score-ring-wrap{ text-align:center; padding:20px 0; }
+.score-big{ font-family:var(--font-num); font-size:48px; font-weight:700; }
+.score-sub{ color:var(--ink-soft); font-size:14px; margin-top:4px; }
+
+.explain-box{
+  margin-top:8px; padding:12px; border-radius:var(--radius-s);
+  background:var(--paper); border:1px solid var(--line); font-size:13.5px; color:var(--ink-soft);
+}
+
+/* ============================================================
+   PROGRESS / CHARTS
+============================================================ */
+.bar-chart-row{ display:flex; align-items:center; gap:10px; margin-top:12px; }
+.bar-chart-label{ width:78px; font-size:12.5px; color:var(--ink-soft); flex-shrink:0; }
+.bar-chart-track{ flex:1; height:10px; background:var(--line); border-radius:99px; overflow:hidden; }
+.bar-chart-fill{ height:100%; border-radius:99px; background:var(--sub); }
+.bar-chart-value{ width:44px; text-align:right; font-family:var(--font-num); font-size:12.5px; color:var(--ink-soft); }
+
+/* ============================================================
+   SHEETS / MODAL
+============================================================ */
+.sheet{
+  position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:50;
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.sheet-inner{
+  background:var(--paper); width:100%; max-width:520px;
+  border-radius:22px 22px 0 0; padding:10px 20px calc(env(safe-area-inset-bottom) + 24px);
+  max-height:88vh; overflow-y:auto;
+}
+.sheet-handle{ width:38px; height:4px; background:var(--line); border-radius:99px; margin:6px auto 14px; }
+.sheet-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.sheet-header h2{ margin:0; font-size:19px; }
+
+.setting-row{ padding:14px 0; border-bottom:1px solid var(--line); }
+.setting-row:last-child{ border-bottom:none; }
+.setting-row label{ font-size:13px; font-weight:600; color:var(--ink-soft); display:block; margin-bottom:6px; }
+
+/* ============================================================
+   SETUP
+============================================================ */
+.setup-wrap{ padding: calc(env(safe-area-inset-top) + 40px) 24px 40px; max-width:480px; margin:0 auto; }
+.setup-eyebrow{ color:var(--ink-soft); font-size:13px; font-weight:600; margin:0 0 6px; }
+.setup-step h1{ font-size:26px; margin:0 0 6px; letter-spacing:-0.01em; }
+.setup-sub{ color:var(--ink-soft); font-size:14px; margin-top:4px; }
+
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
