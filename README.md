@@ -4,18 +4,24 @@ A revision app for Year 11, built to run in Safari on your iPhone as an installe
 app icon. Everything — subjects, sessions, quizzes, progress — is stored **only
 on your phone** using browser storage. Nothing is uploaded anywhere.
 
-## What's in v1
+## What's in v2
 - Dashboard: streak, today/week totals, average quiz score, topics needing revision, recent sessions
-- Subjects: pick from preset GCSE subjects or add your own, edit topics
+- Subjects: pick from preset GCSE subjects or add your own, edit topics, set an **exam board per subject** (or leave as "Not sure yet" and set it whenever you find out — editable any time from the Subjects tab)
 - Revise: start/pause/finish a timed session, rate confidence after, or log a past session manually
 - Quizzes: sample question banks for Maths (Algebra), Biology (Cell structure), Chemistry (Atomic structure), Physics (Energy), English Language (Fiction reading) — mixed multiple-choice, true/false, and short-answer questions, marked instantly with explanations
+- **Flashcards**: create cards per subject/topic, study them with a simple spaced-repetition schedule (Again/Hard/Good/Easy), cards you get wrong resurface sooner
 - Progress: total time, streaks, time per subject, weakest/strongest topics
-- Settings: name, theme, goals, export/import your data as a `.json` backup, reset
+- Settings: name, **dark/light theme**, goals, export/import your data as a `.json` backup, reset
 
-**Not in v1 yet** (from your original brief — can be added next): the AI tutor
-chat, AI-generated quizzes/flashcards, flashcard system, notes section, the
-auto-suggested revision planner, spaced-repetition scheduling, and gamification
-(XP/achievements). The data structures are already there to build these on top of.
+**Not in v2 yet** (from your original brief — can be added next): the AI tutor
+chat, AI-generated quizzes/flashcards, notes section, the auto-suggested
+revision planner, and gamification (XP/achievements). The data structures are
+already there to build these on top of.
+
+### If you already added v1 to your home screen
+Just re-upload these updated files to the same GitHub Pages / Netlify link —
+the app will pick up the new version next time you open it (it checks for
+updates automatically in the background).
 
 ## Getting it onto your iPhone
 

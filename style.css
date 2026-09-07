@@ -98,9 +98,10 @@ input{ font-family:inherit; }
 }
 .tab-btn{
   border:none; background:none; color:var(--ink-faint);
-  display:flex; flex-direction:column; align-items:center; gap:3px;
-  font-size:11px; padding:4px 10px; border-radius:12px;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  font-size:10px; padding:4px 4px; border-radius:12px; flex:1; min-width:0;
 }
+.tab-btn svg{ width:20px; height:20px; }
 .tab-btn.active{ color:var(--ink); }
 .tab-btn.active svg{ color:var(--amber); }
 
@@ -263,6 +264,43 @@ input{ font-family:inherit; }
   margin-top:8px; padding:12px; border-radius:var(--radius-s);
   background:var(--paper); border:1px solid var(--line); font-size:13.5px; color:var(--ink-soft);
 }
+
+/* ============================================================
+   FLASHCARDS
+============================================================ */
+.due-card{
+  background: linear-gradient(135deg, var(--mint-soft), var(--paper-raised) 70%);
+  border-radius:var(--radius-l); padding:20px; border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+}
+.due-card .num{ font-family:var(--font-num); font-size:34px; font-weight:700; }
+.due-card .lbl{ font-size:13px; color:var(--ink-soft); }
+
+.flip-card{
+  min-height:200px; border-radius:var(--radius-l); border:1px solid var(--line);
+  background:var(--paper-raised); display:flex; align-items:center; justify-content:center;
+  text-align:center; padding:30px 20px; font-size:19px; font-weight:600;
+}
+.flip-hint{ text-align:center; margin-top:10px; color:var(--ink-soft); font-size:13px; }
+
+.grade-row{ display:flex; gap:8px; margin-top:16px; }
+.grade-btn{ flex:1; padding:13px 4px; border-radius:var(--radius-s); border:1px solid var(--line); font-weight:700; font-size:13px; background:var(--paper-raised); }
+.grade-again{ color:var(--coral); }
+.grade-hard{ color:#9A6C1B; }
+.grade-good{ color:var(--indigo); }
+.grade-easy{ color:var(--mint); }
+
+.card-list-row{ display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); gap:10px; }
+.card-list-row:last-child{ border-bottom:none; }
+.card-list-front{ font-weight:600; font-size:14px; }
+.card-list-sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.card-list-actions{ display:flex; gap:6px; flex-shrink:0; }
+.card-list-actions button{ border:none; background:none; color:var(--ink-faint); font-size:16px; padding:4px; }
+
+.board-row{ display:flex; align-items:center; gap:10px; margin-top:12px; }
+.board-row .board-row-label{ width:40%; font-weight:600; font-size:14px; flex-shrink:0; }
+.board-row select{ margin-top:0; }
+.board-pill{ font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; background:var(--indigo-soft); color:var(--indigo); border:none; }
 
 /* ============================================================
    PROGRESS / CHARTS

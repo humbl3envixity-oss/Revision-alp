@@ -130,14 +130,19 @@ function loadStore() {
   return {
     setupDone: false,
     user: { name: "", dailyGoalMin: 30, weeklyGoalHrs: 5, theme: "light" },
-    examBoards: {},
+    examBoards: {},       // keyed by subject.id -> board name, "" = not set yet
     subjects: [],
     sessions: [],
     quizAttempts: [],
+    flashcards: [],       // {id, subjectId, topicId, front, back, interval, nextReview, lastReviewed}
     activeTimer: null,
   };
 }
+const BOARD_OPTIONS = ["AQA", "Edexcel", "OCR", "WJEC", "Eduqas"];
 let STORE = loadStore();
+// migrate older saved data that predates flashcards / per-subject exam boards
+if (!STORE.flashcards) STORE.flashcards = [];
+if (!STORE.examBoards) STORE.examBoards = {};
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(STORE)); }
 
 function buildDefaultSubjects(selectedNames) {
@@ -248,6 +253,7 @@ function render() {
   else if (CURRENT_VIEW === "subjects") el.innerHTML = viewSubjects();
   else if (CURRENT_VIEW === "revise") el.innerHTML = viewRevise();
   else if (CURRENT_VIEW === "quizzes") el.innerHTML = viewQuizzes();
+  else if (CURRENT_VIEW === "flashcards") el.innerHTML = viewFlashcards();
   else if (CURRENT_VIEW === "progress") el.innerHTML = viewProgress();
   document.getElementById("greeting").textContent = STORE.user.name ? `Hi, ${STORE.user.name}` : "Hi there";
   document.getElementById("dateLine").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
@@ -335,6 +341,11 @@ function viewSubjects() {
             <div class="subject-meta">${s.topics.length} topic${s.topics.length === 1 ? "" : "s"} &middot; ${fmtMins(subjectMinutes(s.id))} revised</div>
           </div>
           <button class="icon-btn" data-action="remove-subject" data-id="${s.id}" aria-label="Remove">✕</button>
+        </div>
+        <div style="margin-top:8px;">
+          ${STORE.examBoards[s.id] ?
+            `<button class="board-pill" data-action="edit-board" data-subject="${s.id}">${STORE.examBoards[s.id]} &middot; edit</button>` :
+            `<button class="board-pill" style="background:var(--paper);color:var(--ink-soft);border:1px dashed var(--line);" data-action="edit-board" data-subject="${s.id}">+ Set exam board</button>`}
         </div>
         <div class="topic-chip-row">
           ${s.topics.map(t => `<span class="topic-chip ${t.confidence <= 2 ? 'weak' : ''}">${t.name}</span>`).join("")}
@@ -576,6 +587,160 @@ function viewProgress() {
 }
 
 /* --------------------------------------------------------------------------
+   VIEW: FLASHCARDS
+-------------------------------------------------------------------------- */
+let STUDY = null; // in-progress flashcard study session
+
+function viewFlashcards() {
+  if (STUDY && STUDY.finished) return viewStudyResults();
+  if (STUDY) return viewStudyPlay();
+
+  if (STORE.subjects.length === 0) {
+    return `<div class="card"><div class="empty-state">Add a subject first to create flashcards.</div>
+      <button class="btn-primary" data-action="goto" data-view="subjects">Go to Subjects</button></div>`;
+  }
+
+  const today = todayStr();
+  const due = STORE.flashcards.filter(c => !c.nextReview || c.nextReview <= today);
+
+  return `
+    <div class="due-card">
+      <div>
+        <div class="num">${due.length}</div>
+        <div class="lbl">card${due.length === 1 ? "" : "s"} due today</div>
+      </div>
+      <button class="btn-primary" style="width:auto;margin-top:0;padding:13px 20px;" data-action="start-study" ${STORE.flashcards.length === 0 ? "disabled" : ""}>Study now</button>
+    </div>
+
+    <div class="section-title">Your cards<a href="#" data-action="add-flashcard">+ New card</a></div>
+    <div class="card">
+      ${STORE.flashcards.length === 0 ? `<div class="empty-state">No flashcards yet — add your first one above.</div>` :
+        STORE.subjects.map(s => {
+          const cards = STORE.flashcards.filter(c => c.subjectId === s.id);
+          if (cards.length === 0) return "";
+          return `<p class="topic-sub" style="font-weight:700;margin:14px 0 4px;">${s.name}</p>` +
+            cards.map(c => `
+              <div class="card-list-row">
+                <div>
+                  <div class="card-list-front">${c.front}</div>
+                  <div class="card-list-sub">${c.nextReview && c.nextReview > today ? "Next review " + c.nextReview : "Due now"}</div>
+                </div>
+                <div class="card-list-actions">
+                  <button data-action="edit-flashcard" data-id="${c.id}">✎</button>
+                  <button data-action="delete-flashcard" data-id="${c.id}">🗑</button>
+                </div>
+              </div>
+            `).join("");
+        }).join("")}
+    </div>
+  `;
+}
+
+function viewStudyPlay() {
+  const card = STUDY.cards[STUDY.index];
+  const sub = findSubject(card.subjectId);
+  return `
+    <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${(STUDY.index / STUDY.cards.length) * 100}%"></div></div>
+    <p class="topic-sub">Card ${STUDY.index + 1} of ${STUDY.cards.length}${sub ? " · " + sub.name : ""}</p>
+    <div class="flip-card">${STUDY.revealed ? card.back : card.front}</div>
+    ${!STUDY.revealed ?
+      `<div class="flip-hint">Tap to reveal the answer</div>
+       <button class="btn-primary" data-action="show-answer">Show answer</button>` :
+      `<div class="grade-row">
+        <button class="grade-btn grade-again" data-action="grade-card" data-rating="again">Again</button>
+        <button class="grade-btn grade-hard" data-action="grade-card" data-rating="hard">Hard</button>
+        <button class="grade-btn grade-good" data-action="grade-card" data-rating="good">Good</button>
+        <button class="grade-btn grade-easy" data-action="grade-card" data-rating="easy">Easy</button>
+      </div>`}
+  `;
+}
+
+function viewStudyResults() {
+  return `
+    <div class="card score-ring-wrap">
+      <div class="score-big">${STUDY.reviewedCount}</div>
+      <div class="score-sub">card${STUDY.reviewedCount === 1 ? "" : "s"} reviewed</div>
+    </div>
+    <button class="btn-primary" data-action="finish-study">Done</button>
+  `;
+}
+
+function startFlashcardStudy(subjectId) {
+  const today = todayStr();
+  let pool = subjectId ? STORE.flashcards.filter(c => c.subjectId === subjectId) : STORE.flashcards.slice();
+  let due = pool.filter(c => !c.nextReview || c.nextReview <= today);
+  if (due.length === 0) due = pool; // nothing due — offer to review anyway
+  if (due.length === 0) return;
+  STUDY = { cards: [...due].sort(() => Math.random() - 0.5), index: 0, revealed: false, finished: false, reviewedCount: 0 };
+  setView("flashcards");
+}
+
+function gradeCard(card, rating) {
+  let interval = card.interval || 1;
+  if (rating === "again") interval = 1;
+  else if (rating === "hard") interval = Math.max(1, Math.round(interval * 1.2));
+  else if (rating === "good") interval = Math.max(1, Math.round(interval * 2.5));
+  else if (rating === "easy") interval = Math.max(1, Math.round(interval * 4));
+  card.interval = interval;
+  const next = new Date();
+  next.setDate(next.getDate() + (rating === "again" ? 0 : interval));
+  card.nextReview = next.toISOString().slice(0, 10);
+  card.lastReviewed = new Date().toISOString();
+}
+
+function flashcardAnswer(rating) {
+  const card = STUDY.cards[STUDY.index];
+  gradeCard(card, rating);
+  STUDY.reviewedCount++;
+  if (rating === "again") STUDY.cards.push(card); // resurface later this session
+  STUDY.index++;
+  STUDY.revealed = false;
+  save();
+  if (STUDY.index >= STUDY.cards.length) STUDY.finished = true;
+  render();
+}
+
+function openFlashcardModal(cardId) {
+  const editing = cardId ? STORE.flashcards.find(c => c.id === cardId) : null;
+  const s0 = editing ? findSubject(editing.subjectId) : STORE.subjects[0];
+  openModal(`
+    <h2 style="margin-top:0;">${editing ? "Edit flashcard" : "New flashcard"}</h2>
+    <label class="field-label">Subject</label>
+    <select class="input-lg" id="fcSubject">
+      ${STORE.subjects.map(s => `<option value="${s.id}" ${editing && editing.subjectId === s.id ? "selected" : ""}>${s.name}</option>`).join("")}
+    </select>
+    <label class="field-label">Topic (optional)</label>
+    <select class="input-lg" id="fcTopic">
+      <option value="">No specific topic</option>
+      ${s0.topics.map(t => `<option value="${t.id}" ${editing && editing.topicId === t.id ? "selected" : ""}>${t.name}</option>`).join("")}
+    </select>
+    <label class="field-label">Front</label>
+    <textarea class="input-lg" id="fcFront" rows="2">${editing ? editing.front : ""}</textarea>
+    <label class="field-label">Back</label>
+    <textarea class="input-lg" id="fcBack" rows="2">${editing ? editing.back : ""}</textarea>
+    <button class="btn-primary" id="fcSaveBtn">${editing ? "Save changes" : "Add card"}</button>
+  `);
+  document.getElementById("fcSubject").addEventListener("change", (e) => {
+    const s = findSubject(e.target.value);
+    document.getElementById("fcTopic").innerHTML = `<option value="">No specific topic</option>` +
+      s.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+  });
+  document.getElementById("fcSaveBtn").addEventListener("click", () => {
+    const front = document.getElementById("fcFront").value.trim();
+    const back = document.getElementById("fcBack").value.trim();
+    if (!front || !back) return;
+    const subjectId = document.getElementById("fcSubject").value;
+    const topicId = document.getElementById("fcTopic").value || null;
+    if (editing) {
+      editing.front = front; editing.back = back; editing.subjectId = subjectId; editing.topicId = topicId;
+    } else {
+      STORE.flashcards.push({ id: uid(), subjectId, topicId, front, back, interval: 1, nextReview: todayStr(), lastReviewed: null });
+    }
+    save(); closeModal(); render();
+  });
+}
+
+/* --------------------------------------------------------------------------
    MODAL HELPERS
 -------------------------------------------------------------------------- */
 function openModal(html) {
@@ -793,13 +958,15 @@ function nextQuestion() {
 function addSubjectByName(name) {
   const catalogEntry = DEFAULT_CATALOG.find(s => s.name === name);
   const colorIdx = STORE.subjects.length % 8;
-  STORE.subjects.push({
+  const subject = {
     id: uid(), name, colorIdx,
     topics: catalogEntry ? catalogEntry.topics.map(t => ({
       id: uid(), name: t.name, subtopics: t.subtopics.map(st => ({ id: uid(), name: st })), confidence: 3,
     })) : [],
-  });
+  };
+  STORE.subjects.push(subject);
   save(); render();
+  editExamBoard(subject.id);
 }
 function addCustomSubject() {
   openModal(`
@@ -811,7 +978,26 @@ function addCustomSubject() {
   document.getElementById("customSubjectSave").addEventListener("click", () => {
     const name = document.getElementById("customSubjectName").value.trim();
     if (!name) return;
-    STORE.subjects.push({ id: uid(), name, colorIdx: STORE.subjects.length % 8, topics: [] });
+    const subject = { id: uid(), name, colorIdx: STORE.subjects.length % 8, topics: [] };
+    STORE.subjects.push(subject);
+    save(); closeModal(); render();
+    editExamBoard(subject.id);
+  });
+}
+function editExamBoard(subjectId) {
+  const current = STORE.examBoards[subjectId] || "";
+  const sub = findSubject(subjectId);
+  openModal(`
+    <h2 style="margin-top:0;">Exam board${sub ? " — " + sub.name : ""}</h2>
+    <p class="topic-sub">Not sure yet? Leave it and set it whenever you find out.</p>
+    <select class="input-lg" id="boardSelect">
+      <option value="">Not sure yet</option>
+      ${BOARD_OPTIONS.map(b => `<option ${b === current ? "selected" : ""}>${b}</option>`).join("")}
+    </select>
+    <button class="btn-primary" id="boardSaveBtn">Save</button>
+  `);
+  document.getElementById("boardSaveBtn").addEventListener("click", () => {
+    STORE.examBoards[subjectId] = document.getElementById("boardSelect").value;
     save(); closeModal(); render();
   });
 }
@@ -868,20 +1054,32 @@ function resetData() {
 function initSetupScreen() {
   document.getElementById("setupSubjects").innerHTML = DEFAULT_CATALOG.map(s =>
     `<button class="chip" data-setup-subject="${s.name}">${s.name}</button>`).join("");
-  document.getElementById("setupBoards").innerHTML = ["AQA", "Edexcel", "OCR", "WJEC", "Eduqas"].map(b =>
-    `<button class="chip" data-setup-board="${b}">${b}</button>`).join("");
 
   document.querySelectorAll("[data-setup-subject]").forEach(chip =>
     chip.addEventListener("click", () => chip.classList.toggle("selected")));
-  document.querySelectorAll("[data-setup-board]").forEach(chip =>
-    chip.addEventListener("click", () => {
-      document.querySelectorAll("[data-setup-board]").forEach(c => c.classList.remove("selected"));
-      chip.classList.add("selected");
-    }));
+
+  function populateBoardRows() {
+    const selected = [...document.querySelectorAll("[data-setup-subject].selected")].map(c => c.dataset.setupSubject);
+    const rows = document.getElementById("setupBoardRows");
+    if (selected.length === 0) {
+      rows.innerHTML = `<p class="topic-sub">No subjects picked yet — go back and choose at least one.</p>`;
+      return;
+    }
+    rows.innerHTML = selected.map(name => `
+      <div class="board-row">
+        <div class="board-row-label">${name}</div>
+        <select class="input-lg" data-board-for="${name}">
+          <option value="">Not sure yet</option>
+          ${BOARD_OPTIONS.map(b => `<option>${b}</option>`).join("")}
+        </select>
+      </div>
+    `).join("");
+  }
 
   document.querySelectorAll("[data-next]").forEach(btn => {
     btn.addEventListener("click", () => {
       const nextStep = btn.dataset.next;
+      if (nextStep === "3") populateBoardRows();
       document.querySelectorAll(".setup-step").forEach(s => s.classList.add("hidden"));
       document.querySelector(`.setup-step[data-step="${nextStep}"]`).classList.remove("hidden");
     });
@@ -890,15 +1088,16 @@ function initSetupScreen() {
   document.getElementById("setupFinish").addEventListener("click", () => {
     const name = document.getElementById("setupName").value.trim() || "there";
     const selectedSubjects = [...document.querySelectorAll("[data-setup-subject].selected")].map(c => c.dataset.setupSubject);
-    const board = document.querySelector("[data-setup-board].selected");
+    const boardBySubjectName = {};
+    document.querySelectorAll("[data-board-for]").forEach(sel => { boardBySubjectName[sel.dataset.boardFor] = sel.value; });
     const daily = Number(document.getElementById("setupDaily").value) || 30;
     const weekly = Number(document.getElementById("setupWeekly").value) || 5;
 
     STORE.user.name = name;
     STORE.user.dailyGoalMin = daily;
     STORE.user.weeklyGoalHrs = weekly;
-    STORE.examBoards.default = board ? board.dataset.setupBoard : "";
     STORE.subjects = buildDefaultSubjects(selectedSubjects);
+    STORE.subjects.forEach(s => { STORE.examBoards[s.id] = boardBySubjectName[s.name] || ""; });
     STORE.setupDone = true;
     save();
 
@@ -910,7 +1109,10 @@ function initSetupScreen() {
 }
 
 function applyTheme() {
-  document.documentElement.setAttribute("data-theme", STORE.user.theme || "light");
+  const theme = STORE.user.theme || "light";
+  document.documentElement.setAttribute("data-theme", theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", theme === "dark" ? "#14162B" : "#F5F6F1");
 }
 
 /* --------------------------------------------------------------------------
@@ -919,6 +1121,7 @@ function applyTheme() {
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
+  if (btn.tagName === "A") e.preventDefault();
   const action = btn.dataset.action;
 
   if (action === "goto") setView(btn.dataset.view);
@@ -937,6 +1140,14 @@ document.addEventListener("click", (e) => {
   else if (action === "add-custom-subject") addCustomSubject();
   else if (action === "remove-subject") { if (confirm("Remove this subject and its topics?")) removeSubject(btn.dataset.id); }
   else if (action === "add-topic") addTopicToSubject(btn.dataset.subject);
+  else if (action === "edit-board") editExamBoard(btn.dataset.subject);
+  else if (action === "start-study") startFlashcardStudy(btn.dataset.subject || null);
+  else if (action === "show-answer") { STUDY.revealed = true; render(); }
+  else if (action === "grade-card") flashcardAnswer(btn.dataset.rating);
+  else if (action === "finish-study") { STUDY = null; setView("flashcards"); }
+  else if (action === "add-flashcard") openFlashcardModal();
+  else if (action === "edit-flashcard") openFlashcardModal(btn.dataset.id);
+  else if (action === "delete-flashcard") { if (confirm("Delete this flashcard?")) { STORE.flashcards = STORE.flashcards.filter(f => f.id !== btn.dataset.id); save(); render(); } }
   else if (action === "set-theme") { STORE.user.theme = btn.dataset.val; applyTheme(); save(); renderSettings(); }
   else if (action === "save-settings") {
     STORE.user.name = document.getElementById("setName").value.trim();

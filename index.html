@@ -39,9 +39,9 @@
 
       <div class="setup-step hidden" data-step="3">
         <p class="setup-eyebrow">Exam board</p>
-        <h1>Which exam board are you following?</h1>
-        <p class="setup-sub">This just helps flag when content needs checking.</p>
-        <div id="setupBoards" class="chip-grid"></div>
+        <h1>Which exam board for each subject?</h1>
+        <p class="setup-sub">Boards can differ by subject. Leave any as "Not sure yet" and set it later in Subjects.</p>
+        <div id="setupBoardRows"></div>
         <button class="btn-primary" data-next="4">Continue</button>
       </div>
 
@@ -88,6 +88,10 @@
       <button class="tab-btn" data-view="quizzes">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M9 21h6v-1H9zm3-19a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2Zm-1 8.5-2.5-2.5 1.06-1.06L11 9.38l3.44-3.44L15.5 7z"/></svg>
         <span>Quizzes</span>
+      </button>
+      <button class="tab-btn" data-view="flashcards">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 5h13a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3zm15.5 1.5 3 2v9l-3 2z"/></svg>
+        <span>Cards</span>
       </button>
       <button class="tab-btn" data-view="progress">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7z"/></svg>
