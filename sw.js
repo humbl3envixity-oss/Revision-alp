@@ -1,5 +1,6 @@
-const CACHE = "revise-v2";
+const CACHE = "revise-v3";
 const ASSETS = ["./", "./index.html", "./style.css", "./app.js", "./manifest.json"];
+// worker.js is deliberately NOT cached here or served from this app — it lives on Cloudflare, not GitHub.
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));

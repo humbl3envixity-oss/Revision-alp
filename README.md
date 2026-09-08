@@ -4,7 +4,40 @@ A revision app for Year 11, built to run in Safari on your iPhone as an installe
 app icon. Everything — subjects, sessions, quizzes, progress — is stored **only
 on your phone** using browser storage. Nothing is uploaded anywhere.
 
-## What's in v2
+## What's in v3
+- Everything from v2, plus:
+- **AI Tutor** — a real chat with Claude (Haiku 4.5), aware of the subject/topic you're currently on. Quick-action buttons for "Explain this", "Quiz me", "Give me a hint", "Simplify it", "Give me an exam question". Uses the Socratic method when testing you rather than just handing over answers, and says so when it isn't sure a detail matches your exact exam board.
+
+## Setting up the AI Tutor (~5 minutes, free)
+
+**This is the only part of the app that needs a paid API key — everything else works with zero setup.**
+
+### Step 1 — Get an Anthropic API key
+1. Go to **console.anthropic.com** and create an account (separate from a claude.ai subscription — this is pay-as-you-go).
+2. Add a small amount of credit (a few dollars covers a huge number of tutor conversations — this app uses the cheap Haiku model).
+3. Go to **API Keys** and create a new key. Copy it somewhere safe temporarily — you won't be able to see it again.
+
+### Step 2 — Deploy the backend on Cloudflare Workers (this is what keeps your key safe)
+1. Go to **dash.cloudflare.com** and create a free account.
+2. Go to **Workers & Pages → Create → Create Worker**. Give it any name (e.g. `revise-ai`) and deploy the default template.
+3. Click **Edit code**, delete everything in the editor, and paste in the contents of `worker.js` from this folder. Click **Deploy**.
+4. Go to the worker's **Settings → Variables and Secrets → Add**. Name it exactly `ANTHROPIC_API_KEY`, paste in your key from Step 1, mark it as **Secret**, and save.
+5. Your worker now has a public URL like `https://revise-ai.yourname.workers.dev` — copy it.
+
+### Step 3 — Connect the app
+1. Open the app → Settings (gear icon) → **AI Assistant** → paste the worker URL from Step 2 → **Save changes**.
+2. Go to the **Tutor** tab and try it.
+
+### Important — keep `worker.js` out of your GitHub repo, or upload it without the key
+`worker.js` itself contains no secret (the key lives only in Cloudflare's secret storage, added via
+the dashboard in Step 2.4), so it's safe to include in your repo for reference if you want. **Never**
+paste your actual API key into any file you upload to GitHub, GitHub Pages, or anywhere public —
+only into the Cloudflare Secrets field.
+
+If the Tutor tab shows "Not connected yet," it just means Step 3 hasn't been done yet — everything
+else in the app (revision timer, quizzes, flashcards, progress) works fully offline without this.
+
+
 - Dashboard: streak, today/week totals, average quiz score, topics needing revision, recent sessions
 - Subjects: pick from preset GCSE subjects or add your own, edit topics, set an **exam board per subject** (or leave as "Not sure yet" and set it whenever you find out — editable any time from the Subjects tab)
 - Revise: start/pause/finish a timed session, rate confidence after, or log a past session manually

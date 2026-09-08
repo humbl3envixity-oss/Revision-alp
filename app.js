@@ -135,6 +135,8 @@ function loadStore() {
     sessions: [],
     quizAttempts: [],
     flashcards: [],       // {id, subjectId, topicId, front, back, interval, nextReview, lastReviewed}
+    aiEndpoint: "",        // your deployed Cloudflare Worker URL — see README
+    aiMessages: [],         // {role:'user'|'assistant', content}
     activeTimer: null,
   };
 }
@@ -143,6 +145,8 @@ let STORE = loadStore();
 // migrate older saved data that predates flashcards / per-subject exam boards
 if (!STORE.flashcards) STORE.flashcards = [];
 if (!STORE.examBoards) STORE.examBoards = {};
+if (!STORE.aiEndpoint) STORE.aiEndpoint = "";
+if (!STORE.aiMessages) STORE.aiMessages = [];
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(STORE)); }
 
 function buildDefaultSubjects(selectedNames) {
@@ -254,9 +258,14 @@ function render() {
   else if (CURRENT_VIEW === "revise") el.innerHTML = viewRevise();
   else if (CURRENT_VIEW === "quizzes") el.innerHTML = viewQuizzes();
   else if (CURRENT_VIEW === "flashcards") el.innerHTML = viewFlashcards();
+  else if (CURRENT_VIEW === "tutor") el.innerHTML = viewTutor();
   else if (CURRENT_VIEW === "progress") el.innerHTML = viewProgress();
   document.getElementById("greeting").textContent = STORE.user.name ? `Hi, ${STORE.user.name}` : "Hi there";
   document.getElementById("dateLine").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  if (CURRENT_VIEW === "tutor") {
+    const scroller = document.getElementById("chatScroll");
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -288,6 +297,7 @@ function viewHome() {
     <div class="quick-grid">
       <button class="quick-btn" data-action="goto" data-view="revise"><span class="qi">⏱</span>Start Revision</button>
       <button class="quick-btn" data-action="goto" data-view="quizzes"><span class="qi">📝</span>Take a Quiz</button>
+      <button class="quick-btn" data-action="goto" data-view="tutor"><span class="qi">💬</span>AI Tutor</button>
       <button class="quick-btn" data-action="goto" data-view="subjects"><span class="qi">📚</span>Subjects</button>
       <button class="quick-btn" data-action="goto" data-view="progress"><span class="qi">📊</span>Progress</button>
     </div>
@@ -587,6 +597,108 @@ function viewProgress() {
 }
 
 /* --------------------------------------------------------------------------
+   VIEW: AI TUTOR
+-------------------------------------------------------------------------- */
+const TUTOR_QUICK_PROMPTS = [
+  { label: "Explain this", prompt: "Can you explain this topic to me in simple terms, step by step?" },
+  { label: "Quiz me", prompt: "Ask me one question at a time on this topic, and mark my answers as I go." },
+  { label: "Give me a hint", prompt: "Give me a hint for this topic without telling me the full answer." },
+  { label: "Simplify it", prompt: "Can you explain that again, more simply?" },
+  { label: "Give me an exam question", prompt: "Give me a realistic exam-style question on this topic." },
+];
+
+function viewTutor() {
+  if (!STORE.aiEndpoint) {
+    return `
+      <div class="setup-banner">
+        <b>Not connected yet.</b> The AI Tutor needs a backend URL to talk to Claude securely.
+        Add yours in Settings → AI Assistant. See the README for the 5-minute Cloudflare Workers setup.
+      </div>
+      <button class="btn-primary" data-action="open-settings-shortcut">Open Settings</button>
+    `;
+  }
+
+  const s0 = STORE.subjects[0];
+  return `
+    ${STORE.subjects.length > 0 ? `
+      <div class="card" style="margin-bottom:14px;">
+        <label class="field-label" style="margin-top:0;">Talking about</label>
+        <div style="display:flex; gap:8px; margin-top:6px;">
+          <select class="input-lg" id="tutorSubject" style="margin-top:0;">
+            ${STORE.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join("")}
+          </select>
+          <select class="input-lg" id="tutorTopic" style="margin-top:0;">
+            ${s0.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+          </select>
+        </div>
+      </div>` : ""}
+
+    <div class="chat-quick-row">
+      ${TUTOR_QUICK_PROMPTS.map(q => `<button data-action="tutor-quick" data-prompt="${q.prompt.replace(/"/g, '&quot;')}">${q.label}</button>`).join("")}
+    </div>
+
+    <div class="chat-scroll" id="chatScroll">
+      ${STORE.aiMessages.length === 0 ? `<div class="empty-state">Ask me to explain a topic, quiz you, or help you plan revision.</div>` :
+        STORE.aiMessages.map(m => `<div class="chat-bubble ${m.role}">${escapeHtml(m.content)}</div>`).join("")}
+      ${AI_LOADING ? `<div class="chat-bubble thinking">Thinking…</div>` : ""}
+    </div>
+
+    <div class="chat-input-row">
+      <textarea id="chatInput" rows="1" placeholder="Ask anything about your revision…"></textarea>
+      <button class="chat-send-btn" data-action="send-chat" aria-label="Send">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="m2 21 21-9L2 3v7l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  `;
+}
+
+function escapeHtml(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML.replace(/\n/g, "<br>");
+}
+
+let AI_LOADING = false;
+
+async function sendChatMessage(text) {
+  if (!text || !text.trim() || AI_LOADING) return;
+  const subjectSel = document.getElementById("tutorSubject");
+  const topicSel = document.getElementById("tutorTopic");
+  let contextLine = "";
+  if (subjectSel && topicSel) {
+    const sub = findSubject(subjectSel.value);
+    const top = sub ? findTopic(sub.id, topicSel.value) : null;
+    const board = sub ? STORE.examBoards[sub.id] : "";
+    if (sub && top) contextLine = `The student is currently revising "${top.name}" in ${sub.name}${board ? ` (${board} exam board)` : ""}.`;
+  }
+
+  STORE.aiMessages.push({ role: "user", content: text.trim() });
+  save();
+  AI_LOADING = true;
+  render();
+
+  const system = `You are a friendly, encouraging Year 11 GCSE revision tutor talking to a student inside their personal revision app. ${contextLine} Explain things clearly and simply, use short paragraphs suited to a phone screen, and use the Socratic method when testing the student — ask questions and give hints rather than immediately revealing answers, unless they ask you directly for the answer. If you are not confident an exam-board-specific detail is accurate, say so clearly and suggest the student check their specification. Never claim an answer is correct if you are unsure.`;
+
+  const apiMessages = STORE.aiMessages.map(m => ({ role: m.role, content: m.content }));
+
+  try {
+    const res = await fetch(STORE.aiEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: apiMessages, system }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Request failed");
+    STORE.aiMessages.push({ role: "assistant", content: data.text || "(No response)" });
+  } catch (err) {
+    STORE.aiMessages.push({ role: "assistant", content: "Couldn't reach the AI assistant. Check your internet connection and that the endpoint URL in Settings is correct." });
+  }
+  AI_LOADING = false;
+  save();
+  render();
+}
+
+/* --------------------------------------------------------------------------
    VIEW: FLASHCARDS
 -------------------------------------------------------------------------- */
 let STUDY = null; // in-progress flashcard study session
@@ -772,6 +884,11 @@ function renderSettings() {
     <div class="setting-row">
       <label>Weekly goal (hours)</label>
       <input type="number" class="input-lg" id="setWeekly" value="${STORE.user.weeklyGoalHrs}">
+    </div>
+    <div class="setting-row">
+      <label>AI Assistant</label>
+      <p class="topic-sub" style="margin:0 0 6px;">Paste your Cloudflare Worker URL here — see the README for setup. Never paste your Anthropic API key anywhere in this app.</p>
+      <input class="input-lg" id="setAiEndpoint" placeholder="https://your-worker.workers.dev" value="${STORE.aiEndpoint}">
     </div>
     <button class="btn-primary" data-action="save-settings">Save changes</button>
     <div class="setting-row">
@@ -1148,11 +1265,15 @@ document.addEventListener("click", (e) => {
   else if (action === "add-flashcard") openFlashcardModal();
   else if (action === "edit-flashcard") openFlashcardModal(btn.dataset.id);
   else if (action === "delete-flashcard") { if (confirm("Delete this flashcard?")) { STORE.flashcards = STORE.flashcards.filter(f => f.id !== btn.dataset.id); save(); render(); } }
+  else if (action === "tutor-quick") { document.getElementById("chatInput").value = btn.dataset.prompt; sendChatMessage(btn.dataset.prompt); }
+  else if (action === "send-chat") { const ta = document.getElementById("chatInput"); const text = ta.value; ta.value = ""; sendChatMessage(text); }
+  else if (action === "open-settings-shortcut") { renderSettings(); document.getElementById("settingsSheet").classList.remove("hidden"); }
   else if (action === "set-theme") { STORE.user.theme = btn.dataset.val; applyTheme(); save(); renderSettings(); }
   else if (action === "save-settings") {
     STORE.user.name = document.getElementById("setName").value.trim();
     STORE.user.dailyGoalMin = Number(document.getElementById("setDaily").value) || 30;
     STORE.user.weeklyGoalHrs = Number(document.getElementById("setWeekly").value) || 5;
+    STORE.aiEndpoint = document.getElementById("setAiEndpoint").value.trim();
     save(); document.getElementById("settingsSheet").classList.add("hidden"); render();
   }
   else if (action === "export-data") exportData();
@@ -1168,7 +1289,20 @@ document.addEventListener("change", (e) => {
     const s = findSubject(e.target.value);
     document.getElementById("quizTopic").innerHTML = s.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
   }
+  if (e.target.id === "tutorSubject") {
+    const s = findSubject(e.target.value);
+    document.getElementById("tutorTopic").innerHTML = s.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+  }
   if (e.target.id === "importFile" && e.target.files[0]) importData(e.target.files[0]);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.id === "chatInput" && e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    const text = e.target.value;
+    e.target.value = "";
+    sendChatMessage(text);
+  }
 });
 
 document.querySelectorAll(".tab-btn").forEach(btn => btn.addEventListener("click", () => setView(btn.dataset.view)));
