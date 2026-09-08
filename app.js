@@ -135,6 +135,7 @@ function loadStore() {
     sessions: [],
     quizAttempts: [],
     flashcards: [],       // {id, subjectId, topicId, front, back, interval, nextReview, lastReviewed}
+    customQuizzes: {},     // keyed "Subject::Topic" -> AI-generated question arrays, merged with QUIZ_BANK
     aiEndpoint: "",        // your deployed Cloudflare Worker URL — see README
     aiMessages: [],         // {role:'user'|'assistant', content}
     activeTimer: null,
@@ -147,6 +148,7 @@ if (!STORE.flashcards) STORE.flashcards = [];
 if (!STORE.examBoards) STORE.examBoards = {};
 if (!STORE.aiEndpoint) STORE.aiEndpoint = "";
 if (!STORE.aiMessages) STORE.aiMessages = [];
+if (!STORE.customQuizzes) STORE.customQuizzes = {};
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(STORE)); }
 
 function buildDefaultSubjects(selectedNames) {
@@ -235,6 +237,12 @@ function topicsNeedingRevision() {
 }
 function subjectMinutes(subjectId) {
   return STORE.sessions.filter(s => s.subjectId === subjectId).reduce((a, s) => a + s.durationSec / 60, 0);
+}
+function getQuizBank(subjectName, topicName) {
+  const key = `${subjectName}::${topicName}`;
+  const custom = STORE.customQuizzes[key] || [];
+  const builtin = QUIZ_BANK[key] || [];
+  return [...custom, ...builtin];
 }
 
 /* --------------------------------------------------------------------------
@@ -453,7 +461,7 @@ function viewQuizzes() {
       <label class="field-label">Number of questions</label>
       <input type="number" class="input-lg" id="quizCount" value="5" min="1" max="10">
       <button class="btn-primary" data-action="start-quiz">Start quiz</button>
-      <p class="topic-sub" style="margin-top:10px;">Sample questions are preloaded for Maths (Algebra), Biology (Cell structure), Chemistry (Atomic structure), Physics (Energy), and English Language (Fiction reading). More topics can be added to the question bank any time.</p>
+      <p class="topic-sub" style="margin-top:10px;">Sample questions are preloaded for Maths (Algebra), Biology (Cell structure), Chemistry (Atomic structure), Physics (Energy), and English Language (Fiction reading). For any other topic, head to the AI Tutor tab → Create to generate your own.</p>
     </div>
 
     <div class="section-title">Recent results</div>
@@ -597,7 +605,7 @@ function viewProgress() {
 }
 
 /* --------------------------------------------------------------------------
-   VIEW: AI TUTOR
+   VIEW: AI TUTOR (Chat + Create)
 -------------------------------------------------------------------------- */
 const TUTOR_QUICK_PROMPTS = [
   { label: "Explain this", prompt: "Can you explain this topic to me in simple terms, step by step?" },
@@ -606,6 +614,11 @@ const TUTOR_QUICK_PROMPTS = [
   { label: "Simplify it", prompt: "Can you explain that again, more simply?" },
   { label: "Give me an exam question", prompt: "Give me a realistic exam-style question on this topic." },
 ];
+
+let TUTOR_MODE = "chat"; // "chat" | "create"
+let GEN_TYPE = "quiz";   // "quiz" | "flashcards"
+let GEN_LOADING = false;
+let GEN_RESULT = null;
 
 function viewTutor() {
   if (!STORE.aiEndpoint) {
@@ -618,6 +631,17 @@ function viewTutor() {
     `;
   }
 
+  const segControl = `
+    <div class="seg-control">
+      <button class="seg-btn ${TUTOR_MODE === "chat" ? "active" : ""}" data-action="tutor-mode" data-mode="chat">Chat</button>
+      <button class="seg-btn ${TUTOR_MODE === "create" ? "active" : ""}" data-action="tutor-mode" data-mode="create">Create</button>
+    </div>
+  `;
+
+  return segControl + (TUTOR_MODE === "create" ? viewTutorCreate() : viewTutorChat());
+}
+
+function viewTutorChat() {
   const s0 = STORE.subjects[0];
   return `
     ${STORE.subjects.length > 0 ? `
@@ -652,6 +676,79 @@ function viewTutor() {
   `;
 }
 
+function viewTutorCreate() {
+  if (STORE.subjects.length === 0) {
+    return `<div class="card"><div class="empty-state">Add a subject first so the AI knows what to generate content for.</div>
+      <button class="btn-primary" data-action="goto" data-view="subjects">Go to Subjects</button></div>`;
+  }
+
+  if (GEN_RESULT) return viewGenResult();
+
+  const s0 = STORE.subjects[0];
+  return `
+    <div class="card">
+      <p class="topic-sub" style="margin:0 0 10px;">Describe what you want and the AI will generate it — quizzes get added straight to your Quiz tab, flashcards go straight into Cards.</p>
+
+      <div class="gen-type-row">
+        <button class="gen-type-btn ${GEN_TYPE === "quiz" ? "active" : ""}" data-action="gen-type" data-type="quiz">Quiz</button>
+        <button class="gen-type-btn ${GEN_TYPE === "flashcards" ? "active" : ""}" data-action="gen-type" data-type="flashcards">Flashcards</button>
+      </div>
+
+      <label class="field-label">Subject</label>
+      <select class="input-lg" id="genSubject">
+        ${STORE.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join("")}
+      </select>
+      <label class="field-label">Topic</label>
+      <select class="input-lg" id="genTopic">
+        ${s0.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("")}
+      </select>
+
+      ${GEN_TYPE === "quiz" ? `
+        <label class="field-label">Number of questions</label>
+        <input type="number" class="input-lg" id="genCount" value="8" min="1" max="20">
+        <label class="field-label">Difficulty</label>
+        <select class="input-lg" id="genDifficulty">
+          <option>Easy</option><option selected>Medium</option><option>Hard</option>
+        </select>
+      ` : `
+        <label class="field-label">Number of cards</label>
+        <input type="number" class="input-lg" id="genCardCount" value="10" min="1" max="30">
+      `}
+
+      <label class="field-label">Anything specific? (optional)</label>
+      <textarea class="input-lg" id="genInstructions" rows="2" placeholder="e.g. focus on exam-style questions, or keep it to the basics"></textarea>
+
+      <button class="btn-primary" id="generateBtn" data-action="generate-content" ${GEN_LOADING ? "disabled" : ""}>
+        ${GEN_LOADING ? "Generating…" : `Generate ${GEN_TYPE === "quiz" ? "quiz" : "flashcards"}`}
+      </button>
+    </div>
+  `;
+}
+
+function viewGenResult() {
+  if (GEN_RESULT.type === "error") {
+    return `
+      <div class="card">
+        <p class="topic-sub">${GEN_RESULT.message}</p>
+        <button class="btn-primary" data-action="gen-retry">Try again</button>
+      </div>
+    `;
+  }
+  const sub = findSubject(GEN_RESULT.subjectId);
+  const top = sub ? findTopic(sub.id, GEN_RESULT.topicId) : null;
+  return `
+    <div class="card gen-result-card">
+      <div class="big">${GEN_RESULT.type === "quiz" ? "📝" : "🗂"}</div>
+      <h3 style="margin:10px 0 2px;">${GEN_RESULT.count} ${GEN_RESULT.type === "quiz" ? "questions" : "flashcards"} added</h3>
+      <p class="topic-sub">${top ? top.name : ""} &middot; ${sub ? sub.name : ""}</p>
+      ${GEN_RESULT.type === "quiz" ?
+        `<button class="btn-primary" data-action="start-generated-quiz" data-subject="${GEN_RESULT.subjectId}" data-topic="${GEN_RESULT.topicId}">Start this quiz now</button>` :
+        `<button class="btn-primary" data-action="goto" data-view="flashcards">Go to Cards</button>`}
+      <button class="btn-secondary" data-action="gen-retry">Generate more</button>
+    </div>
+  `;
+}
+
 function escapeHtml(str) {
   const d = document.createElement("div");
   d.textContent = str;
@@ -659,6 +756,17 @@ function escapeHtml(str) {
 }
 
 let AI_LOADING = false;
+
+async function callAI(messages, system) {
+  const res = await fetch(STORE.aiEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, system }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || "Request failed");
+  return data.text || "";
+}
 
 async function sendChatMessage(text) {
   if (!text || !text.trim() || AI_LOADING) return;
@@ -682,19 +790,72 @@ async function sendChatMessage(text) {
   const apiMessages = STORE.aiMessages.map(m => ({ role: m.role, content: m.content }));
 
   try {
-    const res = await fetch(STORE.aiEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: apiMessages, system }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || "Request failed");
-    STORE.aiMessages.push({ role: "assistant", content: data.text || "(No response)" });
+    const text2 = await callAI(apiMessages, system);
+    STORE.aiMessages.push({ role: "assistant", content: text2 || "(No response)" });
   } catch (err) {
     STORE.aiMessages.push({ role: "assistant", content: "Couldn't reach the AI assistant. Check your internet connection and that the endpoint URL in Settings is correct." });
   }
   AI_LOADING = false;
   save();
+  render();
+}
+
+/* --------------------------------------------------------------------------
+   AI CONTENT GENERATION (quizzes / flashcards)
+-------------------------------------------------------------------------- */
+function parseAiJson(raw) {
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
+}
+
+async function generateContent() {
+  if (GEN_LOADING) return;
+  const subjectId = document.getElementById("genSubject").value;
+  const topicId = document.getElementById("genTopic").value;
+  const sub = findSubject(subjectId);
+  const top = findTopic(subjectId, topicId);
+  const board = STORE.examBoards[subjectId];
+  const instructions = document.getElementById("genInstructions").value.trim();
+
+  GEN_LOADING = true;
+  render();
+
+  try {
+    if (GEN_TYPE === "quiz") {
+      const count = Math.min(20, Math.max(1, Number(document.getElementById("genCount").value) || 8));
+      const difficulty = document.getElementById("genDifficulty").value;
+      const system = `You are a GCSE quiz-question generator. You respond ONLY with valid JSON — no markdown fences, no commentary, no text before or after. Do not claim an answer is correct if you are not confident it is.`;
+      const prompt = `Create ${count} GCSE ${sub.name} quiz questions on the topic "${top.name}"${board ? ` for the ${board} exam board` : ""}. Difficulty: ${difficulty}. Mix question types across "mcq" (4 options), "tf" (true/false), and "fill" (fill-in-the-blank) where they suit the content. ${instructions ? "Additional instructions: " + instructions + ". " : ""}Respond with ONLY this exact JSON shape and nothing else:
+{"questions":[{"type":"mcq","q":"question text","options":["a","b","c","d"],"answer":0,"explain":"why"},{"type":"tf","q":"statement","answer":true,"explain":"why"},{"type":"fill","q":"sentence with __________ blank","answer":["accepted answer"],"explain":"why"}]}`;
+
+      const raw = await callAI([{ role: "user", content: prompt }], system);
+      const parsed = parseAiJson(raw);
+      if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) throw new Error("empty");
+
+      const key = `${sub.name}::${top.name}`;
+      STORE.customQuizzes[key] = (STORE.customQuizzes[key] || []).concat(parsed.questions);
+      save();
+      GEN_RESULT = { type: "quiz", count: parsed.questions.length, subjectId, topicId };
+    } else {
+      const count = Math.min(30, Math.max(1, Number(document.getElementById("genCardCount").value) || 10));
+      const system = `You are a GCSE flashcard generator. You respond ONLY with valid JSON — no markdown fences, no commentary, no text before or after.`;
+      const prompt = `Create ${count} GCSE ${sub.name} flashcards on the topic "${top.name}"${board ? ` for the ${board} exam board` : ""}. Keep the front short (a question or term) and the back concise (the answer or definition). ${instructions ? "Additional instructions: " + instructions + ". " : ""}Respond with ONLY this exact JSON shape and nothing else:
+{"cards":[{"front":"...","back":"..."}]}`;
+
+      const raw = await callAI([{ role: "user", content: prompt }], system);
+      const parsed = parseAiJson(raw);
+      if (!parsed.cards || !Array.isArray(parsed.cards) || parsed.cards.length === 0) throw new Error("empty");
+
+      parsed.cards.forEach(c => {
+        STORE.flashcards.push({ id: uid(), subjectId, topicId, front: c.front, back: c.back, interval: 1, nextReview: todayStr(), lastReviewed: null });
+      });
+      save();
+      GEN_RESULT = { type: "flashcards", count: parsed.cards.length, subjectId, topicId };
+    }
+  } catch (err) {
+    GEN_RESULT = { type: "error", message: "Something went wrong generating that — the AI's response wasn't quite right, or the connection dropped. Try again, maybe with simpler instructions." };
+  }
+  GEN_LOADING = false;
   render();
 }
 
@@ -1015,13 +1176,12 @@ function startQuiz() {
   const count = Math.max(1, Number(document.getElementById("quizCount").value) || 5);
   const sub = findSubject(subjectId);
   const top = findTopic(subjectId, topicId);
-  const key = `${sub.name}::${top.name}`;
-  const bank = QUIZ_BANK[key];
+  const bank = getQuizBank(sub.name, top.name);
 
   if (!bank || bank.length === 0) {
     openModal(`
-      <h2 style="margin-top:0;">No sample questions yet</h2>
-      <p class="topic-sub">There isn't a preloaded question bank for "${top.name}" yet. Try Maths &middot; Algebra, Biology &middot; Cell structure, Chemistry &middot; Atomic structure, Physics &middot; Energy, or English Language &middot; Fiction reading — or add your own questions to the bank in the code.</p>
+      <h2 style="margin-top:0;">No questions yet for this topic</h2>
+      <p class="topic-sub">There isn't a question bank for "${top.name}" yet. Try Maths &middot; Algebra, Biology &middot; Cell structure, Chemistry &middot; Atomic structure, Physics &middot; Energy, or English Language &middot; Fiction reading — or head to the AI Tutor tab and ask it to create some for this topic.</p>
       <button class="btn-primary" id="closeNoQuiz">Got it</button>
     `);
     document.getElementById("closeNoQuiz").addEventListener("click", closeModal);
@@ -1268,6 +1428,18 @@ document.addEventListener("click", (e) => {
   else if (action === "tutor-quick") { document.getElementById("chatInput").value = btn.dataset.prompt; sendChatMessage(btn.dataset.prompt); }
   else if (action === "send-chat") { const ta = document.getElementById("chatInput"); const text = ta.value; ta.value = ""; sendChatMessage(text); }
   else if (action === "open-settings-shortcut") { renderSettings(); document.getElementById("settingsSheet").classList.remove("hidden"); }
+  else if (action === "tutor-mode") { TUTOR_MODE = btn.dataset.mode; GEN_RESULT = null; render(); }
+  else if (action === "gen-type") { GEN_TYPE = btn.dataset.type; render(); }
+  else if (action === "generate-content") generateContent();
+  else if (action === "gen-retry") { GEN_RESULT = null; render(); }
+  else if (action === "start-generated-quiz") {
+    const sub = findSubject(btn.dataset.subject);
+    const top = findTopic(btn.dataset.subject, btn.dataset.topic);
+    const bank = getQuizBank(sub.name, top.name);
+    QUIZ = { subjectId: btn.dataset.subject, topicId: btn.dataset.topic, questions: [...bank].sort(() => Math.random() - 0.5).slice(0, Math.min(10, bank.length)), index: 0, answers: [], correct: [], score: 0, finished: false };
+    GEN_RESULT = null;
+    setView("quizzes");
+  }
   else if (action === "set-theme") { STORE.user.theme = btn.dataset.val; applyTheme(); save(); renderSettings(); }
   else if (action === "save-settings") {
     STORE.user.name = document.getElementById("setName").value.trim();
@@ -1292,6 +1464,10 @@ document.addEventListener("change", (e) => {
   if (e.target.id === "tutorSubject") {
     const s = findSubject(e.target.value);
     document.getElementById("tutorTopic").innerHTML = s.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+  }
+  if (e.target.id === "genSubject") {
+    const s = findSubject(e.target.value);
+    document.getElementById("genTopic").innerHTML = s.topics.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
   }
   if (e.target.id === "importFile" && e.target.files[0]) importData(e.target.files[0]);
 });

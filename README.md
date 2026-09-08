@@ -4,9 +4,9 @@ A revision app for Year 11, built to run in Safari on your iPhone as an installe
 app icon. Everything — subjects, sessions, quizzes, progress — is stored **only
 on your phone** using browser storage. Nothing is uploaded anywhere.
 
-## What's in v3
-- Everything from v2, plus:
-- **AI Tutor** — a real chat with Claude (Haiku 4.5), aware of the subject/topic you're currently on. Quick-action buttons for "Explain this", "Quiz me", "Give me a hint", "Simplify it", "Give me an exam question". Uses the Socratic method when testing you rather than just handing over answers, and says so when it isn't sure a detail matches your exact exam board.
+## What's in v4
+- Everything from v3, plus:
+- The **Tutor** tab now has two modes: **Chat** (as before) and **Create** — ask the AI to generate a quiz or a batch of flashcards for any subject/topic, with a difficulty and optional instructions (e.g. "make it exam-style" or "keep it to the basics"). Generated quizzes are added straight into the normal Quiz system (they show up automatically next time you quiz that topic); generated flashcards land straight in Cards ready to study.
 
 ## Setting up the AI Tutor (~5 minutes, free)
 
