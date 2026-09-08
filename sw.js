@@ -1,4 +1,4 @@
-const CACHE = "revise-v4";
+const CACHE = "revise-v5";
 const ASSETS = ["./", "./index.html", "./style.css", "./app.js", "./manifest.json"];
 // worker.js is deliberately NOT cached here or served from this app — it lives on Cloudflare, not GitHub.
 

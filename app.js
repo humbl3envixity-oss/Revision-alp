@@ -758,13 +758,25 @@ function escapeHtml(str) {
 let AI_LOADING = false;
 
 async function callAI(messages, system) {
-  const res = await fetch(STORE.aiEndpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, system }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || "Request failed");
+  let res;
+  try {
+    res = await fetch(STORE.aiEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, system }),
+    });
+  } catch (networkErr) {
+    throw new Error(`Couldn't reach that URL at all. Double-check it's copied exactly from Cloudflare (starts with https://, no trailing spaces, ends in .workers.dev) and that the worker shows as "Deployed" in your dashboard.`);
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch (parseErr) {
+    throw new Error(`The worker responded but not with JSON (HTTP ${res.status}). This usually means the URL points to something other than the deployed worker, e.g. the Cloudflare dashboard page instead of the workers.dev URL.`);
+  }
+  if (!res.ok || data.error) {
+    throw new Error(data.error || `Worker returned HTTP ${res.status} with no error message.`);
+  }
   return data.text || "";
 }
 
@@ -793,7 +805,7 @@ async function sendChatMessage(text) {
     const text2 = await callAI(apiMessages, system);
     STORE.aiMessages.push({ role: "assistant", content: text2 || "(No response)" });
   } catch (err) {
-    STORE.aiMessages.push({ role: "assistant", content: "Couldn't reach the AI assistant. Check your internet connection and that the endpoint URL in Settings is correct." });
+    STORE.aiMessages.push({ role: "assistant", content: `⚠️ ${err.message}` });
   }
   AI_LOADING = false;
   save();
@@ -853,7 +865,7 @@ async function generateContent() {
       GEN_RESULT = { type: "flashcards", count: parsed.cards.length, subjectId, topicId };
     }
   } catch (err) {
-    GEN_RESULT = { type: "error", message: "Something went wrong generating that — the AI's response wasn't quite right, or the connection dropped. Try again, maybe with simpler instructions." };
+    GEN_RESULT = { type: "error", message: err && err.message && !err.message.includes("Unexpected") ? err.message : "The AI's response wasn't valid JSON, so nothing could be added. Try again, maybe with simpler instructions." };
   }
   GEN_LOADING = false;
   render();
